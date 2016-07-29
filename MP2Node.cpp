@@ -15,6 +15,7 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
 	this->log = log;
 	ht = new HashTable();
 	this->memberNode->addr = *address;
+	quorum_store = new map<int,vector<Mp2Message>>();
 }
 
 /**
@@ -23,6 +24,9 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
 MP2Node::~MP2Node() {
 	delete ht;
 	delete memberNode;
+	if(quorum_store) {
+	    delete quorum_store;
+	}
 }
 
 /**
@@ -327,6 +331,7 @@ void MP2Node::checkMessages() {
 		        {
 		            Mp2Message reply_message = message;
 		            reply_message.msgType = REPLY;
+		            reply_message.resp4msgType = CREATE;
 		            reply_message.data.success = createKeyValue(message.data.key,
                                                     message.data.value,
                                                     message.data.replica);
@@ -354,6 +359,7 @@ void MP2Node::checkMessages() {
 		        {
 		            Mp2Message reply_message = message;
 		            reply_message.msgType = READREPLY;
+		            reply_message.resp4msgType = READ;
 		            message.data.value = readKey(message.data.key);
 		            if(message.data.value != "")
                     {
@@ -377,6 +383,7 @@ void MP2Node::checkMessages() {
                 {
                     Mp2Message reply_message = message;
 		            reply_message.msgType = REPLY;
+		            reply_message.resp4msgType = UPDATE;
                     reply_message.data.success = updateKeyValue(message.data.key,
                                         message.data.value,
                                         message.data.replica);
@@ -403,6 +410,7 @@ void MP2Node::checkMessages() {
                 {
 		            Mp2Message reply_message = message;
 		            reply_message.msgType = REPLY;
+		            reply_message.resp4msgType = DELETE;
                     reply_message.data.success = deletekey(message.data.key);
                     if(reply_message.data.success)
                     {
@@ -422,11 +430,22 @@ void MP2Node::checkMessages() {
                 }
 		        break;
 		    case REPLY:
-		        {
-		        }
-		        break;
 		    case READREPLY:
 		        {
+		            map<int,vector<Mp2Message>>::iterator itr =
+		                quorum_store->find(message.data.transID);
+		            if(itr != quorum_store->end())
+		            {
+		                itr->second.push_back(message);
+		            }
+		            else{
+		                vector<Mp2Message> mp2mesgvct;
+		                mp2mesgvct.push_back(message);
+                        quorum_store->insert(make_pair(message.data.transID,
+                                                mp2mesgvct));
+                        check_quorum(message.data.transID);
+		            }
+
 		        }
 		        break;
 		}
@@ -507,3 +526,107 @@ void MP2Node::stabilizationProtocol() {
 	 * Implement this
 	 */
 }
+
+void MP2Node::check_quorum(int transID) {
+    map<int,vector<Mp2Message>>::iterator itr =
+		                quorum_store->find(transID);
+    if(itr != quorum_store->end())
+    {
+        vector<Mp2Message> replies = itr->second;
+        bool quorum_reached = false;
+        bool quorum_result = 0;
+        if(replies.size() == 3)
+        {
+            quorum_reached = true;
+        }else{
+            quorum_reached = (replies[0].data.success ==
+                                replies[0].data.success);
+        }
+
+        if(quorum_reached)
+        {
+            for(auto &&mesg: replies)
+            {
+                if(mesg.data.success) {
+                    quorum_result+=1;
+                }else{
+                    quorum_result-=1;
+                }
+            }
+            switch(replies[0].resp4msgType)
+            {
+            case CREATE:
+                {
+                    if(quorum_result>0)
+                    {
+                        log->logCreateSuccess(&memberNode->addr, true,
+                                    replies[0].data.transID,
+                                    replies[0].data.key,
+                                    replies[0].data.value);
+                    }
+                    else
+                    {
+                        log->logCreateFail(&memberNode->addr, true,
+                                    replies[0].data.transID,
+                                    replies[0].data.key,
+                                    replies[0].data.value);
+                    }
+                }
+                break;
+            case READ:
+                {
+                    if(quorum_result>0)
+                    {
+                        log->logReadSuccess(&memberNode->addr, true,
+                                    replies[0].data.transID,
+                                    replies[0].data.key,
+                                    replies[0].data.value);
+                    }
+                    else
+                    {
+                        log->logReadFail(&memberNode->addr, true,
+                                    replies[0].data.transID,
+                                    replies[0].data.key);
+                    }
+                }
+                break;
+            case UPDATE:
+                {
+                    if(quorum_result>0)
+                    {
+                        log->logUpdateSuccess(&memberNode->addr, true,
+                                    replies[0].data.transID,
+                                    replies[0].data.key,
+                                    replies[0].data.value);
+                    }
+                    else
+                    {
+                        log->logUpdateFail(&memberNode->addr, true,
+                                    replies[0].data.transID,
+                                    replies[0].data.key,
+                                    replies[0].data.value);
+                    }
+                }
+                break;
+            case DELETE:
+                {
+                    if(quorum_result>0)
+                    {
+                        log->logDeleteSuccess(&memberNode->addr, true,
+                                    replies[0].data.transID,
+                                    replies[0].data.key);
+                    }
+                    else
+                    {
+                        log->logDeleteFail(&memberNode->addr, true,
+                                    replies[0].data.transID,
+                                    replies[0].data.key);
+                    }
+                }
+                break;
+            }
+        }
+
+    }
+}
+

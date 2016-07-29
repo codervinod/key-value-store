@@ -19,6 +19,33 @@
 #include "Message.h"
 #include "Queue.h"
 
+
+
+/**
+ * Message Types
+ */
+
+class KeyValMesg {
+public:
+    KeyValMesg() {}
+    KeyValMesg(string k, string v):key(k), value(v), success(false) {}
+    string key;
+    string value;
+    bool success;
+    ReplicaType replica;
+    int transID;
+    Address senderAddr;
+};
+
+class Mp2Message {
+public:
+    Mp2Message() {}
+    Mp2Message(MessageType msg):msgType(msg) {}
+    MessageType msgType;
+    MessageType resp4msgType;
+    KeyValMesg data;
+};
+
 /**
  * CLASS NAME: MP2Node
  *
@@ -47,6 +74,8 @@ private:
 	EmulNet * emulNet;
 	// Object of Log
 	Log * log;
+	//transaction quorum store
+	map<int,vector<Mp2Message>> *quorum_store;
 
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);
@@ -88,32 +117,9 @@ public:
 	// stabilization protocol - handle multiple failures
 	void stabilizationProtocol();
 
+	void check_quorum(int transID);
+
 	~MP2Node();
-};
-
-
-/**
- * Message Types
- */
-
-class KeyValMesg {
-public:
-    KeyValMesg() {}
-    KeyValMesg(string k, string v):key(k), value(v), success(false) {}
-    string key;
-    string value;
-    bool success;
-    ReplicaType replica;
-    int transID;
-    Address senderAddr;
-};
-
-class Mp2Message {
-public:
-    Mp2Message() {}
-    Mp2Message(MessageType msg):msgType(msg) {}
-    MessageType msgType;
-    KeyValMesg data;
 };
 
 #endif /* MP2NODE_H_ */
