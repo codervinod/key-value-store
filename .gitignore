@@ -1,5 +1,6 @@
 .idea/
 *.o
+*.log
 Application
 dbg.log
 msgcount.log
