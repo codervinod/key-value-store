@@ -51,12 +51,14 @@ void MP2Node::updateRing() {
 	 */
 	// Sort the list based on the hashCode
 	sort(curMemList.begin(), curMemList.end());
+	ring = curMemList;
 
 
 	/*
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
+
 }
 
 /**
@@ -111,6 +113,23 @@ void MP2Node::clientCreate(string key, string value) {
 	/*
 	 * Implement this
 	 */
+    vector<Node> replicas = findNodes(key);
+
+    Mp2Message message(CREATE);
+    message.data.transID = ++g_transID;
+    message.data.senderAddr = memberNode->addr;
+    message.data.key = key;
+    message.data.value = value;
+    int i = 0;
+    for (auto &&node: replicas)
+    {
+
+        message.data.replica = (enum ReplicaType)i++;
+        emulNet->ENsend(&memberNode->addr,
+                        &node.nodeAddress, (char *)&message,
+                        sizeof(Mp2Message));
+    }
+
 }
 
 /**
@@ -126,6 +145,21 @@ void MP2Node::clientRead(string key){
 	/*
 	 * Implement this
 	 */
+    vector<Node> replicas = findNodes(key);
+
+    Mp2Message message(READ);
+    message.data.transID = ++g_transID;
+    message.data.senderAddr = memberNode->addr;
+    message.data.key = key;
+    int i = 0;
+    for (auto &&node: replicas)
+    {
+
+        message.data.replica = (enum ReplicaType)i++;
+        emulNet->ENsend(&memberNode->addr,
+                        &node.nodeAddress, (char *)&message,
+                        sizeof(Mp2Message));
+    }
 }
 
 /**
@@ -141,6 +175,22 @@ void MP2Node::clientUpdate(string key, string value){
 	/*
 	 * Implement this
 	 */
+	vector<Node> replicas = findNodes(key);
+
+    Mp2Message message(UPDATE);
+    message.data.transID = ++g_transID;
+    message.data.senderAddr = memberNode->addr;
+    message.data.key = key;
+    message.data.value = value;
+    int i = 0;
+    for (auto &&node: replicas)
+    {
+
+        message.data.replica = (enum ReplicaType)i++;
+        emulNet->ENsend(&memberNode->addr,
+                        &node.nodeAddress, (char *)&message,
+                        sizeof(Mp2Message));
+    }
 }
 
 /**
@@ -156,6 +206,21 @@ void MP2Node::clientDelete(string key){
 	/*
 	 * Implement this
 	 */
+	vector<Node> replicas = findNodes(key);
+
+    Mp2Message message(DELETE);
+    message.data.transID = ++g_transID;
+    message.data.senderAddr = memberNode->addr;
+    message.data.key = key;
+    int i = 0;
+    for (auto &&node: replicas)
+    {
+
+        message.data.replica = (enum ReplicaType)i++;
+        emulNet->ENsend(&memberNode->addr,
+                        &node.nodeAddress, (char *)&message,
+                        sizeof(Mp2Message));
+    }
 }
 
 /**
@@ -171,6 +236,7 @@ bool MP2Node::createKeyValue(string key, string value, ReplicaType replica) {
 	 * Implement this
 	 */
 	// Insert key, value, replicaType into the hash table
+	return ht->create(key, value);
 }
 
 /**
@@ -186,6 +252,7 @@ string MP2Node::readKey(string key) {
 	 * Implement this
 	 */
 	// Read key from local hash table and return value
+	return ht->read(key);
 }
 
 /**
@@ -201,6 +268,7 @@ bool MP2Node::updateKeyValue(string key, string value, ReplicaType replica) {
 	 * Implement this
 	 */
 	// Update key in local hash table and return true or false
+	return ht->update(key, value);
 }
 
 /**
@@ -216,6 +284,7 @@ bool MP2Node::deletekey(string key) {
 	 * Implement this
 	 */
 	// Delete the key from the local hash table
+	return ht->deleteKey(key);
 }
 
 /**
@@ -246,12 +315,121 @@ void MP2Node::checkMessages() {
 		size = memberNode->mp2q.front().size;
 		memberNode->mp2q.pop();
 
-		string message(data, data + size);
 
 		/*
 		 * Handle the message types here
 		 */
+		Mp2Message message;
+		memcpy(&message, data, size);
+		switch(message.msgType)
+		{
+		    case CREATE:
+		        {
+		            Mp2Message reply_message = message;
+		            reply_message.msgType = REPLY;
+		            reply_message.data.success = createKeyValue(message.data.key,
+                                                    message.data.value,
+                                                    message.data.replica);
+                    if(reply_message.data.success)
+                    {
+                        log->logCreateSuccess(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key,
+                                    message.data.value);
+                    }
+                    else
+                    {
+                        log->logCreateFail(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key,
+                                    message.data.value);
+                    }
 
+                    emulNet->ENsend(&memberNode->addr,
+                        &message.data.senderAddr, (char *)&reply_message,
+                        sizeof(Mp2Message));
+		        }
+		        break;
+		    case READ:
+		        {
+		            Mp2Message reply_message = message;
+		            reply_message.msgType = READREPLY;
+		            message.data.value = readKey(message.data.key);
+		            if(message.data.value != "")
+                    {
+                        log->logReadSuccess(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key,
+                                    message.data.value);
+                    }
+                    else
+                    {
+                        log->logReadFail(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key);
+                    }
+		            emulNet->ENsend(&memberNode->addr,
+                        &message.data.senderAddr, (char *)&reply_message,
+                        sizeof(Mp2Message));
+		        }
+		        break;
+		    case UPDATE:
+                {
+                    Mp2Message reply_message = message;
+		            reply_message.msgType = REPLY;
+                    reply_message.data.success = updateKeyValue(message.data.key,
+                                        message.data.value,
+                                        message.data.replica);
+                    if(reply_message.data.success)
+                    {
+                        log->logUpdateSuccess(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key,
+                                    message.data.value);
+                    }
+                    else
+                    {
+                        log->logUpdateFail(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key,
+                                    message.data.value);
+                    }
+                    emulNet->ENsend(&memberNode->addr,
+                        &message.data.senderAddr, (char *)&reply_message,
+                        sizeof(Mp2Message));
+                }
+		        break;
+		    case DELETE:
+                {
+		            Mp2Message reply_message = message;
+		            reply_message.msgType = REPLY;
+                    reply_message.data.success = deletekey(message.data.key);
+                    if(reply_message.data.success)
+                    {
+                        log->logDeleteSuccess(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key);
+                    }
+                    else
+                    {
+                        log->logDeleteFail(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key);
+                    }
+		            emulNet->ENsend(&memberNode->addr,
+                        &message.data.senderAddr, (char *)&reply_message,
+                        sizeof(Mp2Message));
+                }
+		        break;
+		    case REPLY:
+		        {
+		        }
+		        break;
+		    case READREPLY:
+		        {
+		        }
+		        break;
+		}
 	}
 
 	/*

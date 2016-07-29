@@ -91,4 +91,29 @@ public:
 	~MP2Node();
 };
 
+
+/**
+ * Message Types
+ */
+
+class KeyValMesg {
+public:
+    KeyValMesg() {}
+    KeyValMesg(string k, string v):key(k), value(v), success(false) {}
+    string key;
+    string value;
+    bool success;
+    ReplicaType replica;
+    int transID;
+    Address senderAddr;
+};
+
+class Mp2Message {
+public:
+    Mp2Message() {}
+    Mp2Message(MessageType msg):msgType(msg) {}
+    MessageType msgType;
+    KeyValMesg data;
+};
+
 #endif /* MP2NODE_H_ */
