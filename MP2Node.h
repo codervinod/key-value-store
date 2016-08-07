@@ -115,7 +115,7 @@ public:
 	bool deletekey(string key);
 
 	// stabilization protocol - handle multiple failures
-	void stabilizationProtocol();
+	void stabilizationProtocol(vector<Node> &oldRing, vector<Node> &newRing);
 
 	void check_quorum(int transID);
 

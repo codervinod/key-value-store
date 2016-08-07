@@ -43,6 +43,7 @@ void MP2Node::updateRing() {
 	 * Implement this. Parts of it are already implemented
 	 */
 	vector<Node> curMemList;
+	vector<Node> oldRing;
 	bool change = false;
 
 	/*
@@ -55,6 +56,7 @@ void MP2Node::updateRing() {
 	 */
 	// Sort the list based on the hashCode
 	sort(curMemList.begin(), curMemList.end());
+	oldRing = ring;
 	ring = curMemList;
 
 
@@ -62,6 +64,7 @@ void MP2Node::updateRing() {
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
+    stabilizationProtocol(oldRing, ring);
 
 }
 
@@ -521,10 +524,12 @@ int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
  *				1) Ensures that there are three "CORRECT" replicas of all the keys in spite of failures and joins
  *				Note:- "CORRECT" replicas implies that every key is replicated in its two neighboring nodes in the ring
  */
-void MP2Node::stabilizationProtocol() {
+void MP2Node::stabilizationProtocol(vector<Node> &oldRing,
+                                    vector<Node> &newRing) {
 	/*
 	 * Implement this
 	 */
+
 }
 
 void MP2Node::check_quorum(int transID) {
@@ -534,7 +539,7 @@ void MP2Node::check_quorum(int transID) {
     {
         vector<Mp2Message> replies = itr->second;
         bool quorum_reached = false;
-        bool quorum_result = 0;
+        int quorum_result = 0;
         if(replies.size() == 3)
         {
             quorum_reached = true;
