@@ -31,6 +31,8 @@ public:
     KeyValMesg(string k, string v):key(k), value(v), success(false) {}
     string key;
     string value;
+    size_t hash_code;
+    Address to_replicate_addr;
     bool success;
     ReplicaType replica;
     int transID;
@@ -119,6 +121,12 @@ public:
 
 	void check_quorum(int transID);
 
+	void replicateDataWithHash(size_t hash_code, Address &from_node,
+                                        Address &to_node, ReplicaType replica);
+
+    void serverReplicateData(size_t hash_code,
+                                    Address &to_replicate_addr, ReplicaType
+                                    replica);
 	~MP2Node();
 };
 
