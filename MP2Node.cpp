@@ -43,7 +43,6 @@ void MP2Node::updateRing() {
 	 * Implement this. Parts of it are already implemented
 	 */
 	vector<Node> curMemList;
-	vector<Node> oldRing;
 	bool change = false;
 
 	/*
@@ -56,7 +55,6 @@ void MP2Node::updateRing() {
 	 */
 	// Sort the list based on the hashCode
 	sort(curMemList.begin(), curMemList.end());
-	oldRing = ring;
 	ring = curMemList;
 
 
@@ -64,7 +62,7 @@ void MP2Node::updateRing() {
 	 * Step 3: Run the stabilization protocol IF REQUIRED
 	 */
 	// Run stabilization protocol if the hash table size is greater than zero and if there has been a changed in the ring
-    stabilizationProtocol(oldRing, ring);
+    stabilizationProtocol();
 
 }
 
@@ -294,31 +292,6 @@ bool MP2Node::deletekey(string key) {
 	return ht->deleteKey(key);
 }
 
-void MP2Node::serverReplicateData(size_t hash_code,
-                                    Address &to_replicate_addr,
-                                    ReplicaType replica)
-{
-    map<string, string>::iterator itr =  ht->hashTable.begin();
-    while(itr != ht->hashTable.end())
-    {
-        string key = itr->first;
-        string value = itr->second;
-        size_t curr_hash_code = hashFunction(key);
-        if(hash_code == curr_hash_code)
-        {
-            Mp2Message message(CREATE);
-            message.data.transID = -1;
-            message.data.senderAddr = memberNode->addr;
-            message.data.key = key;
-            message.data.value = value;
-            message.data.replica = replica;
-            emulNet->ENsend(&memberNode->addr,
-                            &to_replicate_addr, (char *)&message,
-                            sizeof(Mp2Message));
-        }
-        ++itr;
-    }
-}
 
 /**
  * FUNCTION NAME: checkMessages
@@ -492,13 +465,6 @@ void MP2Node::checkMessages() {
 
 		        }
 		        break;
-		    case REPLICATE:
-                {
-                    serverReplicateData(message.data.hash_code,
-                                    message.data.to_replicate_addr,
-                                    message.data.replica);
-                }
-                break;
 		}
 	}
 
@@ -572,89 +538,12 @@ int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
  *				1) Ensures that there are three "CORRECT" replicas of all the keys in spite of failures and joins
  *				Note:- "CORRECT" replicas implies that every key is replicated in its two neighboring nodes in the ring
  */
-void MP2Node::stabilizationProtocol(vector<Node> &oldRing,
-                                    vector<Node> &newRing) {
+void MP2Node::stabilizationProtocol() {
 	/*
 	 * Implement this
 	 */
 
-	// Only run at master
-	if(memberNode->addr == newRing[0].nodeAddress)
-	{
-	    return;
-	}
 
-	int i=0,j=0;
-    while( i<oldRing.size() && j<newRing.size())
-    {
-        Node &old_node = oldRing[i];
-        Node &new_node = newRing[j];
-        if(old_node.getHashCode() != new_node.getHashCode() )
-        {
-            // node i has failed
-            // handle the case here
-            // copy previous 2 nodes unique data to next one
-            // copy next node this node data to 3rd the node
-            // N-2, N-1, Failed(N), N+1, N+2, N+3
-            // copy N-2 to N+1
-            // copy N-1 to N+2
-            // copy N data in N+1 to N+3
-
-            Node prev_node_first/* N-1 */, prev_node_second/* N-2 */;
-            Node next_node /* N+1 */,
-                    next_second_node /* N+2 */,
-                    next_third_node/* N+3
-             */;
-            if(i>0)
-                prev_node_first = oldRing[i-1];
-            else if(i==0)
-                prev_node_first = oldRing[oldRing.size()-1];
-
-            if(i>1)
-                prev_node_second = oldRing[i-2];
-            else if(i==1)
-                prev_node_second = oldRing[oldRing.size()-1];
-            else if(i==0)
-                prev_node_second = oldRing[oldRing.size()-2];
-
-            next_node = oldRing[(i+1)%(oldRing.size()-1)];
-            next_second_node = oldRing[(i+2)%(oldRing.size()-1)];
-            next_third_node = oldRing[(i+3)%(oldRing.size()-1)];
-            //Send Hash code of data to replicate and to address
-
-            // copy N-2 to N+1
-            replicateDataWithHash(prev_node_second.getHashCode(),
-                                  prev_node_second.nodeAddress,
-                                  next_node.nodeAddress, TERTIARY);
-            // copy N-1 to N+2
-            replicateDataWithHash(prev_node_first.getHashCode(),
-                                  prev_node_first.nodeAddress,
-                                  next_second_node.nodeAddress, SECONDARY);
-
-            // copy N data in N+1 to N+3
-            replicateDataWithHash(old_node.getHashCode(),
-                                  next_node.nodeAddress,
-                                  next_third_node.nodeAddress,
-                                  PRIMARY);
-
-            ++i;
-            continue;
-        }
-        ++i;
-        ++j;
-    }
-}
-
-void MP2Node::replicateDataWithHash(size_t hash_code, Address &from_node,
-                                        Address &to_node,ReplicaType replica)
-{
-    Mp2Message message(REPLICATE);
-    message.data.hash_code = hash_code;
-    message.data.to_replicate_addr = to_node;
-    message.data.replica = replica;
-    emulNet->ENsend(&memberNode->addr,
-                    &from_node, (char *)&message,
-                    sizeof(Mp2Message));
 }
 
 void MP2Node::check_quorum(int transID) {

@@ -32,7 +32,6 @@ public:
     string key;
     string value;
     size_t hash_code;
-    Address to_replicate_addr;
     bool success;
     ReplicaType replica;
     int transID;
@@ -117,16 +116,10 @@ public:
 	bool deletekey(string key);
 
 	// stabilization protocol - handle multiple failures
-	void stabilizationProtocol(vector<Node> &oldRing, vector<Node> &newRing);
+	void stabilizationProtocol();
 
 	void check_quorum(int transID);
 
-	void replicateDataWithHash(size_t hash_code, Address &from_node,
-                                        Address &to_node, ReplicaType replica);
-
-    void serverReplicateData(size_t hash_code,
-                                    Address &to_replicate_addr, ReplicaType
-                                    replica);
 	~MP2Node();
 };
 
