@@ -649,8 +649,7 @@ void MP2Node::markFailedNodeMessageFailed()
         itr != quorum_store->end(); ++itr){
         int transID = itr->first;
         QuorumReplies &qrs = itr->second;
-        if(qrs.quorum_reached)
-            continue;
+
         for(int i=0;i<3;++i)
         {
             if(!qrs.reply_messages[i].got_reply &&
@@ -669,7 +668,8 @@ void MP2Node::markFailedNodeMessageFailed()
                                     message.data.key);
             }
         }
-        check_quorum(transID);
+        if(!qrs.quorum_reached)
+            check_quorum(transID);
     }
 
 }
