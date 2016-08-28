@@ -338,26 +338,24 @@ void MP2Node::checkMessages() {
 		            reply_message.data.success = createKeyValue(message.data.key,
                                                     message.data.value,
                                                     message.data.replica);
-                    if(message.data.transID != -1)
+
+                    if(reply_message.data.success)
                     {
-                        if(reply_message.data.success)
-                        {
-                            log->logCreateSuccess(&memberNode->addr, false,
-                                        message.data.transID,
-                                        message.data.key,
-                                        message.data.value);
-                        }
-                        else
-                        {
-                            log->logCreateFail(&memberNode->addr, false,
-                                        message.data.transID,
-                                        message.data.key,
-                                        message.data.value);
-                        }
-                        emulNet->ENsend(&memberNode->addr,
-                        &message.data.senderAddr, (char *)&reply_message,
-                        sizeof(Mp2Message));
+                        log->logCreateSuccess(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key,
+                                    message.data.value);
                     }
+                    else
+                    {
+                        log->logCreateFail(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key,
+                                    message.data.value);
+                    }
+                    emulNet->ENsend(&memberNode->addr,
+                    &message.data.senderAddr, (char *)&reply_message,
+                    sizeof(Mp2Message));
 		        }
 		        break;
 		    case READ:
@@ -365,28 +363,24 @@ void MP2Node::checkMessages() {
 		            Mp2Message reply_message = message;
 		            reply_message.msgType = READREPLY;
 		            reply_message.resp4msgType = READ;
-		            message.data.value = readKey(message.data.key);
-		            if(message.data.transID != -1)
+		            reply_message.data.value = readKey(message.data.key);
+                    if(reply_message.data.value != "")
                     {
-                        if(message.data.value != "")
-                        {
-                            log->logReadSuccess(&memberNode->addr, false,
-                                        message.data.transID,
-                                        message.data.key,
-                                        message.data.value);
-                        }
-                        else
-                        {
-                            log->logReadFail(&memberNode->addr, false,
-                                        message.data.transID,
-                                        message.data.key);
-                        }
-                        emulNet->ENsend(&memberNode->addr,
-                            &message.data.senderAddr, (char *)&reply_message,
-                            sizeof(Mp2Message));
+                        log->logReadSuccess(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key,
+                                    reply_message.data.value);
                     }
-
-		        }
+                    else
+                    {
+                        log->logReadFail(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key);
+                    }
+                    emulNet->ENsend(&memberNode->addr,
+                        &message.data.senderAddr, (char *)&reply_message,
+                        sizeof(Mp2Message));
+                }
 		        break;
 		    case UPDATE:
                 {
@@ -396,53 +390,48 @@ void MP2Node::checkMessages() {
                     reply_message.data.success = updateKeyValue(message.data.key,
                                         message.data.value,
                                         message.data.replica);
-                    if(message.data.transID != -1)
+
+                    if(reply_message.data.success)
                     {
-                        if(reply_message.data.success)
-                        {
-                            log->logUpdateSuccess(&memberNode->addr, false,
-                                        message.data.transID,
-                                        message.data.key,
-                                        message.data.value);
-                        }
-                        else
-                        {
-                            log->logUpdateFail(&memberNode->addr, false,
-                                        message.data.transID,
-                                        message.data.key,
-                                        message.data.value);
-                        }
-                        emulNet->ENsend(&memberNode->addr,
-                            &message.data.senderAddr, (char *)&reply_message,
-                            sizeof(Mp2Message));
+                        log->logUpdateSuccess(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key,
+                                    message.data.value);
                     }
+                    else
+                    {
+                        log->logUpdateFail(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key,
+                                    message.data.value);
+                    }
+                    emulNet->ENsend(&memberNode->addr,
+                        &message.data.senderAddr, (char *)&reply_message,
+                        sizeof(Mp2Message));
 
                 }
 		        break;
 		    case DELETE:
                 {
-		            Mp2Message reply_message = message;
-		            reply_message.msgType = REPLY;
-		            reply_message.resp4msgType = DELETE;
-                    reply_message.data.success = deletekey(message.data.key);
-                    if(message.data.transID != -1)
+                Mp2Message reply_message = message;
+                reply_message.msgType = REPLY;
+                reply_message.resp4msgType = DELETE;
+                reply_message.data.success = deletekey(message.data.key);
+                    if(reply_message.data.success)
                     {
-                        if(reply_message.data.success)
-                        {
-                            log->logDeleteSuccess(&memberNode->addr, false,
-                                        message.data.transID,
-                                        message.data.key);
-                        }
-                        else
-                        {
-                            log->logDeleteFail(&memberNode->addr, false,
-                                        message.data.transID,
-                                        message.data.key);
-                        }
-                        emulNet->ENsend(&memberNode->addr,
-                            &message.data.senderAddr, (char *)&reply_message,
-                            sizeof(Mp2Message));
-                     }
+                        log->logDeleteSuccess(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key);
+                    }
+                    else
+                    {
+                        log->logDeleteFail(&memberNode->addr, false,
+                                    message.data.transID,
+                                    message.data.key);
+                    }
+                    emulNet->ENsend(&memberNode->addr,
+                        &message.data.senderAddr, (char *)&reply_message,
+                        sizeof(Mp2Message));
 
                 }
 		        break;
