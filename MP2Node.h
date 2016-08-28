@@ -31,7 +31,6 @@ public:
     KeyValMesg(string k, string v):key(k), value(v), success(false) {}
     string key;
     string value;
-    size_t hash_code;
     bool success;
     ReplicaType replica;
     int transID;
@@ -40,11 +39,21 @@ public:
 
 class Mp2Message {
 public:
-    Mp2Message() {}
+    Mp2Message():got_reply(false) {}
     Mp2Message(MessageType msg):msgType(msg) {}
     MessageType msgType;
     MessageType resp4msgType;
     KeyValMesg data;
+    bool got_reply;
+};
+
+class QuorumReplies {
+public:
+    QuorumReplies():quorum_reached(false) {}
+    virtual ~QuorumReplies() {}
+    bool quorum_reached;
+    Mp2Message messages[3];
+    Mp2Message reply_messages[3];
 };
 
 /**
@@ -76,7 +85,7 @@ private:
 	// Object of Log
 	Log * log;
 	//transaction quorum store
-	map<int,vector<Mp2Message>> *quorum_store;
+	map<int,QuorumReplies> *quorum_store;
 
 public:
 	MP2Node(Member *memberNode, Params *par, EmulNet *emulNet, Log *log, Address *addressOfMember);
@@ -117,6 +126,7 @@ public:
 
 	// stabilization protocol - handle multiple failures
 	void stabilizationProtocol();
+    void sendMessage(Mp2Message &message);
 
 	void check_quorum(int transID);
 

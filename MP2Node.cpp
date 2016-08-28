@@ -15,7 +15,7 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
 	this->log = log;
 	ht = new HashTable();
 	this->memberNode->addr = *address;
-	quorum_store = new map<int,vector<Mp2Message>>();
+	quorum_store = new map<int,QuorumReplies>();
 }
 
 /**
@@ -24,9 +24,7 @@ MP2Node::MP2Node(Member *memberNode, Params *par, EmulNet * emulNet, Log * log, 
 MP2Node::~MP2Node() {
 	delete ht;
 	delete memberNode;
-	if(quorum_store) {
-	    delete quorum_store;
-	}
+	delete quorum_store;
 }
 
 /**
@@ -118,24 +116,15 @@ void MP2Node::clientCreate(string key, string value) {
 	/*
 	 * Implement this
 	 */
-    vector<Node> replicas = findNodes(key);
 
     Mp2Message message(CREATE);
     message.data.transID = ++g_transID;
     message.data.senderAddr = memberNode->addr;
     message.data.key = key;
     message.data.value = value;
-    int i = 0;
-    for (auto &&node: replicas)
-    {
-
-        message.data.replica = (enum ReplicaType)i++;
-        emulNet->ENsend(&memberNode->addr,
-                        &node.nodeAddress, (char *)&message,
-                        sizeof(Mp2Message));
-    }
-
+    sendMessage(message);
 }
+
 
 /**
  * FUNCTION NAME: clientRead
@@ -150,21 +139,12 @@ void MP2Node::clientRead(string key){
 	/*
 	 * Implement this
 	 */
-    vector<Node> replicas = findNodes(key);
 
     Mp2Message message(READ);
     message.data.transID = ++g_transID;
     message.data.senderAddr = memberNode->addr;
     message.data.key = key;
-    int i = 0;
-    for (auto &&node: replicas)
-    {
-
-        message.data.replica = (enum ReplicaType)i++;
-        emulNet->ENsend(&memberNode->addr,
-                        &node.nodeAddress, (char *)&message,
-                        sizeof(Mp2Message));
-    }
+    sendMessage(message);
 }
 
 /**
@@ -180,22 +160,13 @@ void MP2Node::clientUpdate(string key, string value){
 	/*
 	 * Implement this
 	 */
-	vector<Node> replicas = findNodes(key);
 
     Mp2Message message(UPDATE);
     message.data.transID = ++g_transID;
     message.data.senderAddr = memberNode->addr;
     message.data.key = key;
     message.data.value = value;
-    int i = 0;
-    for (auto &&node: replicas)
-    {
-
-        message.data.replica = (enum ReplicaType)i++;
-        emulNet->ENsend(&memberNode->addr,
-                        &node.nodeAddress, (char *)&message,
-                        sizeof(Mp2Message));
-    }
+    sendMessage(message);
 }
 
 /**
@@ -211,13 +182,19 @@ void MP2Node::clientDelete(string key){
 	/*
 	 * Implement this
 	 */
-	vector<Node> replicas = findNodes(key);
 
     Mp2Message message(DELETE);
     message.data.transID = ++g_transID;
     message.data.senderAddr = memberNode->addr;
     message.data.key = key;
-    int i = 0;
+    sendMessage(message);
+}
+
+void MP2Node::sendMessage(Mp2Message &message)
+{
+    vector<Node> replicas = findNodes(message.data.key);
+    QuorumReplies qrs;
+    int  i = 0;
     for (auto &&node: replicas)
     {
 
@@ -225,7 +202,9 @@ void MP2Node::clientDelete(string key){
         emulNet->ENsend(&memberNode->addr,
                         &node.nodeAddress, (char *)&message,
                         sizeof(Mp2Message));
+        qrs.messages[i-1] = message;
     }
+    quorum_store->insert(std::pair<int,QuorumReplies>(message.data.transID, qrs));
 }
 
 /**
@@ -325,6 +304,7 @@ void MP2Node::checkMessages() {
 		/*
 		 * Handle the message types here
 		 */
+		#if 1
 		Mp2Message message;
 		memcpy(&message, data, size);
 		switch(message.msgType)
@@ -377,7 +357,7 @@ void MP2Node::checkMessages() {
                                     message.data.transID,
                                     message.data.key);
                     }
-                    emulNet->ENsend(&memberNode->addr,
+                    int sent = emulNet->ENsend(&memberNode->addr,
                         &message.data.senderAddr, (char *)&reply_message,
                         sizeof(Mp2Message));
                 }
@@ -413,10 +393,10 @@ void MP2Node::checkMessages() {
 		        break;
 		    case DELETE:
                 {
-                Mp2Message reply_message = message;
-                reply_message.msgType = REPLY;
-                reply_message.resp4msgType = DELETE;
-                reply_message.data.success = deletekey(message.data.key);
+                    Mp2Message reply_message = message;
+                    reply_message.msgType = REPLY;
+                    reply_message.resp4msgType = DELETE;
+                    reply_message.data.success = deletekey(message.data.key);
                     if(reply_message.data.success)
                     {
                         log->logDeleteSuccess(&memberNode->addr, false,
@@ -438,23 +418,19 @@ void MP2Node::checkMessages() {
 		    case REPLY:
 		    case READREPLY:
 		        {
-		            map<int,vector<Mp2Message>>::iterator itr =
-		                quorum_store->find(message.data.transID);
-		            if(itr != quorum_store->end())
-		            {
-		                itr->second.push_back(message);
-		                check_quorum(message.data.transID);
-		            }
-		            else{
-		                vector<Mp2Message> mp2mesgvct;
-		                mp2mesgvct.push_back(message);
-                        quorum_store->insert(make_pair(message.data.transID,
-                                                mp2mesgvct));
-		            }
-
+		            map<int,QuorumReplies>::iterator itr = quorum_store->find(message.data.transID);
+                    if(itr != quorum_store->end())
+                    {
+                        QuorumReplies &qrs = itr->second;
+                        message.got_reply = true;
+                        qrs.reply_messages[(int)message.data.replica] = message;
+                        //itr->second = qrs;
+                        check_quorum(message.data.transID);
+                    }
 		        }
 		        break;
 		}
+		#endif
 	}
 
 	/*
@@ -536,48 +512,63 @@ void MP2Node::stabilizationProtocol() {
 }
 
 void MP2Node::check_quorum(int transID) {
-    map<int,vector<Mp2Message>>::iterator itr =
-		                quorum_store->find(transID);
+    map<int,QuorumReplies>::iterator itr = quorum_store->find(transID);
     if(itr != quorum_store->end())
     {
-        vector<Mp2Message> replies = itr->second;
-        bool quorum_reached = false;
-        int quorum_result = 0;
-        if(replies.size() == 3)
+        QuorumReplies &qrs = itr->second;
+        int num_replies = 0;
+        if(qrs.quorum_reached)
+            return;
+
+        for(int i=0;i<3;++i)
         {
-            quorum_reached = true;
-        }else{
-            quorum_reached = (replies[0].data.success ==
-                                replies[1].data.success);
+            if(qrs.reply_messages[i].got_reply)
+            {
+                ++num_replies;
+            }
         }
+        bool quorum_reached = (num_replies >=2)?true:false;
+
 
         if(quorum_reached)
         {
-            for(auto &&mesg: replies)
+            int quorum_result = 0;
+            Mp2Message *reply = NULL;
+
+            for(int i=0;i<3;++i)
             {
-                if(mesg.data.success) {
+                if(!qrs.reply_messages[i].got_reply)
+                    continue;
+                reply = &qrs.reply_messages[i];
+                if(qrs.reply_messages[i].data.success) {
                     quorum_result+=1;
                 }else{
                     quorum_result-=1;
                 }
             }
-            switch(replies[0].resp4msgType)
+            if(quorum_result != 0)
+            {
+                qrs.quorum_reached = true;
+            }else{
+                return;
+            }
+            switch(reply->resp4msgType)
             {
             case CREATE:
                 {
                     if(quorum_result>0)
                     {
                         log->logCreateSuccess(&memberNode->addr, true,
-                                    replies[0].data.transID,
-                                    replies[0].data.key,
-                                    replies[0].data.value);
+                                    reply->data.transID,
+                                    reply->data.key,
+                                    reply->data.value);
                     }
                     else
                     {
                         log->logCreateFail(&memberNode->addr, true,
-                                    replies[0].data.transID,
-                                    replies[0].data.key,
-                                    replies[0].data.value);
+                                    reply->data.transID,
+                                    reply->data.key,
+                                    reply->data.value);
                     }
                 }
                 break;
@@ -586,15 +577,15 @@ void MP2Node::check_quorum(int transID) {
                     if(quorum_result>0)
                     {
                         log->logReadSuccess(&memberNode->addr, true,
-                                    replies[0].data.transID,
-                                    replies[0].data.key,
-                                    replies[0].data.value);
+                                    reply->data.transID,
+                                    reply->data.key,
+                                    reply->data.value);
                     }
                     else
                     {
                         log->logReadFail(&memberNode->addr, true,
-                                    replies[0].data.transID,
-                                    replies[0].data.key);
+                                    reply->data.transID,
+                                    reply->data.key);
                     }
                 }
                 break;
@@ -603,16 +594,16 @@ void MP2Node::check_quorum(int transID) {
                     if(quorum_result>0)
                     {
                         log->logUpdateSuccess(&memberNode->addr, true,
-                                    replies[0].data.transID,
-                                    replies[0].data.key,
-                                    replies[0].data.value);
+                                    reply->data.transID,
+                                    reply->data.key,
+                                    reply->data.value);
                     }
                     else
                     {
                         log->logUpdateFail(&memberNode->addr, true,
-                                    replies[0].data.transID,
-                                    replies[0].data.key,
-                                    replies[0].data.value);
+                                    reply->data.transID,
+                                    reply->data.key,
+                                    reply->data.value);
                     }
                 }
                 break;
@@ -621,19 +612,19 @@ void MP2Node::check_quorum(int transID) {
                     if(quorum_result>0)
                     {
                         log->logDeleteSuccess(&memberNode->addr, true,
-                                    replies[0].data.transID,
-                                    replies[0].data.key);
+                                    reply->data.transID,
+                                    reply->data.key);
                     }
                     else
                     {
                         log->logDeleteFail(&memberNode->addr, true,
-                                    replies[0].data.transID,
-                                    replies[0].data.key);
+                                    reply->data.transID,
+                                    reply->data.key);
                     }
                 }
                 break;
             }
-            quorum_store->erase(itr);
+            //quorum_store->erase(itr);
         }
 
     }
