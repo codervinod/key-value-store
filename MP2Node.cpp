@@ -515,7 +515,7 @@ void MP2Node::stabilizationProtocol() {
 	 */
     //iterator on all keys in my hash table
     //move the keys to another nodes where key belongs
-    for (auto e = ht->hashTable.begin(); e != ht->hashTable.end();) {
+    for (auto e = ht->hashTable.begin(); e != ht->hashTable.end();++e) {
       auto replicas = findNodes (e->first);
       auto &key = e->first;
       auto &value = e->second;
@@ -576,14 +576,14 @@ void MP2Node::stabilizationProtocol() {
           }
         }
 
-        e++;
+
 
       } else {
         // The key doesn't belong any longer to this node
         sendReplicationMessage(&replicas[0].nodeAddress, key, value, PRIMARY);
         sendReplicationMessage(&replicas[1].nodeAddress, key, value, SECONDARY);
         sendReplicationMessage(&replicas[2].nodeAddress, key, value, TERTIARY);
-        e = ht->hashTable.erase(e);
+        ht->hashTable.erase(e);
       }
     }
 
@@ -592,6 +592,7 @@ void MP2Node::stabilizationProtocol() {
 void MP2Node::sendReplicationMessage(Address *addr,
         string key, string value, ReplicaType replica) {
     //Send replication message
+
     Mp2Message message(CREATE);
     message.data.transID = ++g_transID;
     message.data.senderAddr = memberNode->addr;
