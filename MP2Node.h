@@ -132,7 +132,8 @@ public:
 	void check_quorum(int transID);
 	void markFailedNodeMessageFailed();
     bool isNodeAlive(Address &adr);
-
+    void sendReplicationMessage(Address *addr, string key, string value,
+    ReplicaType replica);
 	~MP2Node();
 };
 

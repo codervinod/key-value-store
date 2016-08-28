@@ -497,6 +497,9 @@ int MP2Node::enqueueWrapper(void *env, char *buff, int size) {
 	Queue q;
 	return q.enqueue((queue<q_elt> *)env, (void *)buff, size);
 }
+
+
+
 /**
  * FUNCTION NAME: stabilizationProtocol
  *
@@ -510,8 +513,96 @@ void MP2Node::stabilizationProtocol() {
 	/*
 	 * Implement this
 	 */
+    //iterator on all keys in my hash table
+    //move the keys to another nodes where key belongs
+    for (auto e = ht->hashTable.begin(); e != ht->hashTable.end();) {
+      auto replicas = findNodes (e->first);
+      auto &key = e->first;
+      auto &value = e->second;
+      auto inReplicas = find_if(replicas.begin(),
+            replicas.end(),
+            [&](Node &n){return n.nodeAddress == memberNode->addr;});
+      if (inReplicas != replicas.end()) {
 
+        // The key belongs to this node
+        switch (inReplicas - replicas.begin()) {
+        case 0:
+          {
+            bool firstSucessorFail = !isNodeAlive(replicas[1].nodeAddress);
+            bool secondSuccessorFail = !isNodeAlive(replicas[2].nodeAddress);
+            // Keep key as primary
+            ReplicaType replType = PRIMARY;
+            if (firstSucessorFail) {
+              // Send to new first successor
+              sendReplicationMessage(&replicas[1].nodeAddress, key, value, SECONDARY);
+            }
+            if (secondSuccessorFail) {
+              // Send to new second successor
+              sendReplicationMessage(&replicas[2].nodeAddress, key, value, TERTIARY);
+            }
+            break;
+          }
+        case 1:
+          {
+            bool firstPredecessorFail = !isNodeAlive(replicas[0].nodeAddress);
+            bool firstSucessorFail = !isNodeAlive(replicas[2].nodeAddress);
+            // Keep key as secondary
+            ReplicaType replType = SECONDARY;
+            if (firstPredecessorFail) {
+              // Send to new first predecessor
+              sendReplicationMessage(&replicas[0].nodeAddress, key, value, PRIMARY);
+            }
+            if (firstSucessorFail) {
+              // Send to new first successor
+              sendReplicationMessage(&replicas[2].nodeAddress, key, value, TERTIARY);
+            }
+            break;
+          }
+        case 2:
+          {
+            bool secondPredecessorFail = !isNodeAlive(replicas[0].nodeAddress);
+            bool firstPredecessorFail = !isNodeAlive(replicas[1].nodeAddress);
+            // Keep key as tertiary
+            ReplicaType replType = TERTIARY;
+            if (secondPredecessorFail) {
+              // Send to new second predecessor
+              sendReplicationMessage(&replicas[0].nodeAddress, key, value, PRIMARY);
+            }
+            if (firstPredecessorFail) {
+              // Send to new first predecessor
+              sendReplicationMessage(&replicas[1].nodeAddress, key, value, SECONDARY);
+            }
+            break;
+          }
+        }
 
+        e++;
+
+      } else {
+        // The key doesn't belong any longer to this node
+        sendReplicationMessage(&replicas[0].nodeAddress, key, value, PRIMARY);
+        sendReplicationMessage(&replicas[1].nodeAddress, key, value, SECONDARY);
+        sendReplicationMessage(&replicas[2].nodeAddress, key, value, TERTIARY);
+        e = ht->hashTable.erase(e);
+      }
+    }
+
+}
+
+void MP2Node::sendReplicationMessage(Address *addr,
+        string key, string value, ReplicaType replica) {
+    //Send replication message
+    Mp2Message message(CREATE);
+    message.data.transID = ++g_transID;
+    message.data.senderAddr = memberNode->addr;
+    message.data.key = key;
+    message.data.value = value;
+
+    message.data.replica = replica;
+    message.data.recvAddr = *addr;
+    emulNet->ENsend(&memberNode->addr,
+                    addr, (char *)&message,
+                    sizeof(Mp2Message));
 }
 
 void MP2Node::check_quorum(int transID) {
