@@ -35,6 +35,7 @@ public:
     ReplicaType replica;
     int transID;
     Address senderAddr;
+    Address recvAddr;
 };
 
 class Mp2Message {
@@ -129,6 +130,8 @@ public:
     void sendMessage(Mp2Message &message);
 
 	void check_quorum(int transID);
+	void markFailedNodeMessageFailed();
+    bool isNodeAlive(Address &adr);
 
 	~MP2Node();
 };

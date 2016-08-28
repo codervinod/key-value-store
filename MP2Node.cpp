@@ -199,6 +199,7 @@ void MP2Node::sendMessage(Mp2Message &message)
     {
 
         message.data.replica = (enum ReplicaType)i++;
+        message.data.recvAddr = node.nodeAddress;
         emulNet->ENsend(&memberNode->addr,
                         &node.nodeAddress, (char *)&message,
                         sizeof(Mp2Message));
@@ -346,6 +347,7 @@ void MP2Node::checkMessages() {
 		            reply_message.data.value = readKey(message.data.key);
                     if(reply_message.data.value != "")
                     {
+                        reply_message.data.success = true;
                         log->logReadSuccess(&memberNode->addr, false,
                                     message.data.transID,
                                     message.data.key,
@@ -353,6 +355,7 @@ void MP2Node::checkMessages() {
                     }
                     else
                     {
+                        reply_message.data.success = false;
                         log->logReadFail(&memberNode->addr, false,
                                     message.data.transID,
                                     message.data.key);
@@ -424,7 +427,6 @@ void MP2Node::checkMessages() {
                         QuorumReplies &qrs = itr->second;
                         message.got_reply = true;
                         qrs.reply_messages[(int)message.data.replica] = message;
-                        //itr->second = qrs;
                         check_quorum(message.data.transID);
                     }
 		        }
@@ -437,6 +439,7 @@ void MP2Node::checkMessages() {
 	 * This function should also ensure all READ and UPDATE operation
 	 * get QUORUM replies
 	 */
+    markFailedNodeMessageFailed();
 }
 
 /**
@@ -624,9 +627,50 @@ void MP2Node::check_quorum(int transID) {
                 }
                 break;
             }
-            //quorum_store->erase(itr);
         }
 
     }
+}
+
+bool MP2Node::isNodeAlive(Address &adr)
+{
+    auto memberList = getMembershipList();
+    for(auto &&node: memberList)
+    {
+        if(node.nodeAddress == adr)
+            return true;
+    }
+    return false;
+}
+
+void MP2Node::markFailedNodeMessageFailed()
+{
+    for(map<int,QuorumReplies>::iterator itr=quorum_store->begin();
+        itr != quorum_store->end(); ++itr){
+        int transID = itr->first;
+        QuorumReplies &qrs = itr->second;
+        if(qrs.quorum_reached)
+            continue;
+        for(int i=0;i<3;++i)
+        {
+            if(!qrs.reply_messages[i].got_reply &&
+                !isNodeAlive(qrs.messages[i].data.recvAddr))
+            {
+                Mp2Message &message = qrs.messages[i];
+                Mp2Message reply_message = message;
+                reply_message.msgType = REPLY;
+                reply_message.got_reply = true;
+                reply_message.resp4msgType = message.msgType;
+                reply_message.data.success = false;
+                qrs.reply_messages[i] = reply_message;
+
+                log->logReadFail(&message.data.recvAddr, false,
+                                    transID,
+                                    message.data.key);
+            }
+        }
+        check_quorum(transID);
+    }
+
 }
 
